@@ -50,7 +50,7 @@ The first invocation will offer to add the [unpins.cachix.org](https://unpins.ca
 
 ## Man pages
 
-`nano.1`, `nanorc.5`, and `rnano.1` are embedded in the binary — read with `unpin man nano`. The same set rides in the Windows `nano.exe`.
+`nano.1`, `nanorc.5`, and `rnano.1` are embedded in the binary — read with `unpin man nano`.
 
 ## Manual download
 
