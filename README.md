@@ -9,21 +9,21 @@ Standalone build of [GNU nano](https://www.nano-editor.org/).
 
 Part of the [unpins](https://unpins.org) project — native single-binary builds with no third-party runtime dependencies.
 
-## Installation
+## Usage
 
-Install with [unpin](https://github.com/unpins/unpin):
-
-```bash
-unpin nano
-```
-
-Or run without installing:
+Run the `nano` program with [unpin](https://github.com/unpins/unpin):
 
 ```bash
-unpin run nano
+unpin nano file.txt
 ```
 
-`unpin nano` creates an `rnano` alias next to `nano`; invoking it is equivalent to `nano -R` (restricted mode).
+To install it onto your PATH:
+
+```bash
+unpin install nano
+```
+
+Installing also creates an `rnano` command next to `nano`; invoking it is equivalent to `nano -R` (restricted mode).
 
 The syntax-highlighting `*.nanorc` files ship in the `data.tar.zst` companion and land under the install dir's `share/nano/`. To enable them, add to `~/.nanorc`:
 
