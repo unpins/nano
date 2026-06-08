@@ -1,13 +1,13 @@
 # nano
 
-Standalone build of [GNU nano](https://www.nano-editor.org/).
+[GNU nano](https://www.nano-editor.org/) as a single self-contained binary, built natively for Linux, macOS, and Windows.
 
 [![CI](https://github.com/unpins/nano/actions/workflows/nano.yml/badge.svg)](https://github.com/unpins/nano/actions)
 ![Linux](https://img.shields.io/badge/Linux-✓-success?logo=linux&logoColor=white)
 ![macOS](https://img.shields.io/badge/macOS-✓-success?logo=apple&logoColor=white)
 ![Windows](https://img.shields.io/badge/Windows-✓-success?logo=windows&logoColor=white)
 
-Part of the [unpins](https://unpins.org) project — native single-binary builds with no third-party runtime dependencies.
+Part of the [unpins](https://unpins.org) catalog; install it with [`unpin`](https://github.com/unpins/unpin): `unpin install nano`.
 
 ## Usage
 
@@ -33,6 +33,10 @@ include "~/.local/share/unpin/unpins/nano/<tag>/share/nano/*.nanorc"
 
 (Adjust the path for non-Linux installs; nano doesn't auto-discover syntax files relative to the binary.)
 
+## Man pages
+
+`nano.1`, `nanorc.5`, and `rnano.1` are embedded in the binary — read with `unpin man nano`.
+
 ## Build locally
 
 ```bash
@@ -47,10 +51,6 @@ nix run github:unpins/nano
 ```
 
 The first invocation will offer to add the [unpins.cachix.org](https://unpins.cachix.org) substituter so most pulls come pre-built.
-
-## Man pages
-
-`nano.1`, `nanorc.5`, and `rnano.1` are embedded in the binary — read with `unpin man nano`.
 
 ## Manual download
 
