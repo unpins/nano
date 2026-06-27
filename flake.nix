@@ -19,14 +19,19 @@
     unpins-lib.lib.mkStandaloneFlake {
       inherit self;
       name = "nano";
+
+      # Build via the unpin-llvm engine + emit a bitcode multicall module.
+      engine = "unpin-llvm";
+      multicall = {
+        programs = [{ name = "nano"; aliases = [ "rnano" ]; }];
+      };
       build = pkgs:
         let
           ulib = unpins-lib.lib;
           p = pkgs.pkgsStatic;
-          ncursesFB = ulib.embedFallbackTerminfo p.ncurses;
-          pruned = (p.nano.override {
-            ncurses = ncursesFB;
-          }).overrideAttrs (old: {
+          # Fallback terminfo is baked centrally for every engine-Linux ncurses
+          # (native-overlay/ncurses.nix), so p.ncurses already carries it.
+          pruned = p.nano.overrideAttrs (old: {
             postInstall = (old.postInstall or "") + "\n" + ''
               for o in $outputs; do
                 d="''${!o}"
