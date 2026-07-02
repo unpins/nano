@@ -37,6 +37,13 @@ include "~/.local/share/unpin/unpins/nano/<tag>/share/nano/*.nanorc"
 
 `nano.1`, `nanorc.5`, and `rnano.1` are embedded in the binary — read with `unpin man nano`.
 
+## Build notes
+
+- **Windows** uses mingw; Linux and macOS use static builds. All three ship the multicall binary (`nano` + the `rnano` restricted-mode alias).
+- **Syntax detection.** On Linux/macOS nano links `libmagic` for content-based syntax detection (the `magic` nanorc directive) in addition to the usual extension and first-line matching. The Windows build drops libmagic (it doesn't cross-compile cleanly) and relies on extension/first-line matching only.
+- **Terminal.** nano links ncurses; a minimal fallback terminfo is embedded so it renders on common terminals even when the host has no terminfo database. A host database still takes precedence when present.
+- **Tests.** nano's testsuite lives in its upstream git tree, not the release tarball, so there is no `make check` to run; `nano --version` is the smoke floor.
+
 ## Build locally
 
 ```bash
