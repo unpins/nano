@@ -41,12 +41,7 @@
             '';
           });
         in
-        ulib.withAliases pkgs
-          {
-            primary = "nano";
-            aliases = [ "rnano" ];
-          }
-          pruned;
+        pruned;
       # nano cross-mingw pulls `pkgsCross.mingwW64.file` for libmagic; `file`
       # itself fails to cross (readcdf.c hits the same upstream bug the
       # unpins/file repo patches over). `file = null` falls back to
@@ -79,7 +74,7 @@
             };
             # nano's install rule creates `bin/rnano -> bin/nano`, but mingw's binary
             # is `nano.exe` — the symlink dangles and trips noBrokenSymlinks. Drop it;
-            # withAliases recreates it as UNPIN_META.
+            # `rnano` ships as an embedded alias instead.
             postInstall = (old.postInstall or "") + "\n" + ''
               for o in $outputs; do
                 d="''${!o}"
@@ -89,11 +84,6 @@
             '';
           });
         in
-        ulib.withAliases pkgs
-          {
-            primary = "nano.exe";
-            aliases = [ "rnano" ];
-          }
-          patched;
+        patched;
     };
 }
