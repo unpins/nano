@@ -26,6 +26,11 @@
       engine = "unpin-llvm";
       multicall = {
         programs = [{ name = "nano"; aliases = [ "rnano" ]; }];
+        # nano is NLS-enabled and bakes its own $out/share/locale as the
+        # gettext domain directory; the standalone ships bin/ only, so the path
+        # is dead. (The libmagic database path is handled at the source, in the
+        # `file` override below, because that one is READ at run time.)
+        removeReferences = [ "nano-static" "nano-x86_64-w64-mingw32" ];
       };
       build = pkgs:
         let
@@ -33,7 +38,22 @@
           p = pkgs.pkgsStatic;
           # Fallback terminfo is baked centrally for every engine-Linux ncurses
           # (native-overlay/ncurses.nix), so p.ncurses already carries it.
-          pruned = p.nano.overrideAttrs (old: {
+          # libmagic compiles its default database path from `file`'s own
+          # datadir, so nano linked against pkgsStatic.file was carrying
+          # /nix/store/<file>/share/misc/magic -- a LIVE reference (it dragged
+          # file's whole closure) that resolves only on a machine that has that
+          # exact store path. For everyone running the standalone binary it does
+          # not exist, magic_load() fails, and the content-based syntax
+          # detection the README promises never happens. /usr/share/misc/magic
+          # is where Debian, Fedora and macOS all keep it, so a distro-built
+          # nano finds a real database there. The install still writes into
+          # $out (datadir at install time), it is only the COMPILED default that
+          # moves.
+          magicFile = p.file.overrideAttrs (fo: {
+            configureFlags = (fo.configureFlags or [ ]) ++ [ "--datadir=/usr/share" ];
+            installFlags = (fo.installFlags or [ ]) ++ [ "datadir=${placeholder "out"}/share" ];
+          });
+          pruned = (p.nano.override { file = magicFile; }).overrideAttrs (old: {
             postInstall = (old.postInstall or "") + "\n" + ''
               for o in $outputs; do
                 d="''${!o}"
