@@ -63,7 +63,13 @@
             '';
           });
         in
-        pruned;
+        pruned.overrideAttrs (_: {
+          # Off, and measured: `make check` recurses through doc/, src/ and the
+          # rest and reports "Nothing to be done" in each. nano's test suite
+          # lives in a separate repository (nano-tests), not in the release
+          # tarball, so there is nothing here to run.
+          doCheck = false;
+        });
       # nano cross-mingw pulls `pkgsCross.mingwW64.file` for libmagic; `file`
       # itself fails to cross (readcdf.c hits the same upstream bug the
       # unpins/file repo patches over). `file = null` falls back to
