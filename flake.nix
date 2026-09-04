@@ -25,6 +25,8 @@
       # Build via the unpin-llvm engine + emit a bitcode multicall module.
       engine = "unpin-llvm";
       multicall = {
+        # The `.exe` on the engine too, not the nixpkgs mingw-gcc cross.
+        windows = true;
         programs = [{ name = "nano"; aliases = [ "rnano" ]; }];
         # nano is NLS-enabled and bakes its own $out/share/locale as the
         # gettext domain directory; the standalone ships bin/ only, so the path
@@ -88,9 +90,9 @@
           cross = ulib.mingwStaticCross pkgs;
           patched = (cross.nano.override { file = null; }).overrideAttrs (old: {
             patches = (old.patches or [ ]) ++ [ ./nano-mingw-rewinddir.patch ];
-            # nano's Makefile links nano.exe with direct gcc (no libtool), so `-static`
-            # is the right flag — `-all-static` is libtool-specific and gcc rejects it.
-            makeFlags = (old.makeFlags or [ ]) ++ [ "LDFLAGS=-static" ];
+            # No `LDFLAGS=-static` here: it was for mingw-gcc's runtime DLLs, and
+            # the engine has none to fold. Measured, not assumed — the `.exe`
+            # built without it is byte-identical.
             # mingw ncurses headers default to `__declspec(dllimport)` for COLS/wmove/
             # waddnstr/etc., which leaves `__imp_*` references for the static link.
             # `NCURSES_STATIC` flips them back to plain extern declarations.
