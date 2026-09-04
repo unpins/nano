@@ -16,7 +16,116 @@
   # renders correctly on hosts without `/usr/share/terminfo`. Host
   # terminfo still wins when present (database stays enabled).
   outputs = { self, unpins-lib }:
-    unpins-lib.lib.mkStandaloneFlake {
+    let
+      ulib = unpins-lib.lib;
+
+      # VFS mount for nano's system configuration. nano reads SYSCONFDIR
+      # "/nanorc", so the mount IS the sysconfdir and the ZIP root maps onto it.
+      vfsRoot = "/__unpins_nanorc__";
+      # The slash-free middle: on mingw vfs.c matches by strstr, not by POSIX
+      # prefix, so a drive/backslash-mangled path still resolves.
+      vfsMarker = "__unpins_nanorc__";
+
+      # The syntax definitions upstream ships in syntax/, plus a nanorc that
+      # pulls each one in by name. Explicit includes rather than a wildcard:
+      # nano expands an include through glob(3), and a literal path needs
+      # nothing from the mount but the open itself. Text files, so one
+      # build-host copy serves every target.
+      syntaxTree = pkgs: pkgs.buildPackages.runCommand "nano-syntax" { } ''
+        mkdir -p "$out/syntax" src
+        tar xf ${pkgs.buildPackages.nano.src} -C src --strip-components=1
+        cp src/syntax/*.nanorc "$out/syntax/"
+        for f in "$out"/syntax/*.nanorc; do
+          echo "include \"${vfsRoot}/syntax/$(basename "$f")\"" >> "$out/nanorc"
+        done
+        test -s "$out/nanorc"
+      '';
+
+      # Vendor the unpin-vfs core so nano reads its system nanorc and the
+      # syntax files straight out of the binary. The objects are precompiled
+      # with the right -D knobs (the implicit .c.o rule carries none) and put
+      # on the link line through nano_LDADD, kept out of nano_SOURCES so make
+      # never rebuilds them with the wrong flags.
+      injectVfs = pkgs: drv: drv.overrideAttrs (old:
+        let
+          lib = pkgs.lib;
+          isWin = pkgs.stdenv.hostPlatform.isWindows;
+        in
+        {
+          postPatch = (old.postPatch or "") + ''
+            echo "==> inject unpin-vfs core (self-EOF + zstd) for the embedded nanorc"
+            cp ${ulib.vfsCore}/*.c ${ulib.vfsCore}/*.h src/
+
+            echo "==> put the VFS objects on nano's link line"
+            substituteInPlace src/Makefile.in \
+              --replace-fail 'nano_LDADD = $(top_builddir)/lib/libgnu.a' \
+                'nano_LDADD = vfs.o miniz.o unpin_zstd.o $(top_builddir)/lib/libgnu.a'
+
+            echo "==> read the rcfiles through the VFS"
+            # The explicit API at the two call sites, rather than binding the
+            # libc name for the whole program: these are the only two opens
+            # that may land in the mount, and naming them keeps every other
+            # file nano touches on the real filesystem by construction. It is
+            # also the one binding that reads the same on all three platforms
+            # -- vfs.c's _WIN32 half has no rename mode, and a force-included
+            # header cannot come before gnulib's config.h.
+            #
+            # is_good_file() is the gate in front of both: nano only parses an
+            # rcfile it has already access()ed and stat()ed, so those two go
+            # through the VFS as well. The other guard,
+            #     if (access(file, R_OK) == 0 && !is_good_file(file)) return;
+            # is left alone and works in our favour: for a path that lives only
+            # in the binary that access() fails against the real filesystem,
+            # the && short-circuits, and the fopen below is reached.
+            sed -i '/#include "prototypes.h"/a extern FILE *unpin_vfs_fopen(const char *path, const char *mode);\nextern int unpin_vfs_access(const char *path, int mode);\nextern int unpin_vfs_stat(const char *path, struct stat *st);' src/rcfile.c
+            substituteInPlace src/rcfile.c \
+              --replace-fail 'rcstream = fopen(file, "rb");' \
+                             'rcstream = unpin_vfs_fopen(file, "rb");' \
+              --replace-fail 'FILE *rcstream = fopen(nanorc, "rb");' \
+                             'FILE *rcstream = unpin_vfs_fopen(nanorc, "rb");' \
+              --replace-fail 'if (access(file, R_OK) != 0)' \
+                             'if (unpin_vfs_access(file, R_OK) != 0)' \
+              --replace-fail 'if (stat(file, &rcinfo) != -1 && (S_ISDIR(rcinfo.st_mode) ||' \
+                             'if (unpin_vfs_stat(file, &rcinfo) != -1 && (S_ISDIR(rcinfo.st_mode) ||'
+          '';
+
+          # After configure, so the conftest links (which carry no vfs.o) are
+          # untouched, and before anything links.
+          preBuild = (old.preBuild or "") + ''
+            echo "==> pre-compile the unpin-vfs objects"
+            MZ="-DMINIZ_USE_ZSTD -DMINIZ_NO_TIME -DMINIZ_NO_ARCHIVE_WRITING_APIS -DMINIZ_NO_ZLIB_APIS -DMINIZ_NO_ZLIB_COMPATIBLE_NAMES"
+            ( cd src
+              $CC -O2 -c vfs.c -DUNPIN_VFS_DIRS -DUNPIN_VFS_SELF ${
+                   if isWin then "-DUNPIN_VFS_WIN_MARKER='\"${vfsMarker}\"'"
+                   else "-DUNPIN_VFS_NOWRAP" } \
+                -DUNPIN_VFS_ROOT='"${vfsRoot}/"' $MZ -o vfs.o
+              $CC -O2 -c miniz.c      -D_GNU_SOURCE -w $MZ -o miniz.o
+              $CC -O2 -c unpin_zstd.c -D_GNU_SOURCE -w $MZ -DUNPIN_ZSTD_VENDORED -o unpin_zstd.o
+            )
+          '';
+
+          # A binding that fails silently is the whole risk here: nano would go
+          # on reading the real filesystem, find no nanorc, and simply not
+          # highlight -- with a green build. rcfile.o is where the system
+          # nanorc is opened, so it has to name the shim.
+          postBuild = (old.postBuild or "") + ''
+            echo "==> guard: the rcfile reads actually reach the VFS"
+            # All three, not just the open: nano decides whether an rcfile is
+            # worth reading in is_good_file(), which asks access() and stat()
+            # first. Binding only fopen builds clean, passes a one-symbol
+            # check, and still highlights nothing -- measured.
+            for sym in unpin_vfs_fopen unpin_vfs_access unpin_vfs_stat; do
+              $NM src/rcfile.o 2>/dev/null | grep -q "$sym" || {
+                echo "nano: $sym is not referenced from rcfile.o -- the VFS binding did not take" >&2
+                exit 1
+              }
+            done
+          '';
+        }
+      );
+
+    in
+    ulib.mkStandaloneFlake {
       inherit self;
       name = "nano";
       smoke = [ "--version" ];
@@ -33,6 +142,26 @@
         # is dead. (The libmagic database path is handled at the source, in the
         # `file` override below, because that one is READ at run time.)
         removeReferences = [ "nano-static" "nano-x86_64-w64-mingw32" ];
+        # Merge the syntax tree into the mega's EOF ZIP, the way file's magic
+        # database and tcc's sysroot ride along.
+        runtimeDataRoot = pkgs: syntaxTree pkgs;
+      };
+
+      # The same tree on the shipped standalone binary; man pages are
+      # auto-harvested alongside it.
+      runtimeEmbed = {
+        native = pkgs: base: {
+          runtimeStage = ''
+            cp -a ${syntaxTree pkgs}/. "$__unpin_stage/"
+            chmod -R u+w "$__unpin_stage"
+          '';
+        };
+        windows = pkgs: base: {
+          runtimeStage = ''
+            cp -a ${syntaxTree pkgs}/. "$__unpin_stage/"
+            chmod -R u+w "$__unpin_stage"
+          '';
+        };
       };
       build = pkgs:
         let
@@ -65,13 +194,18 @@
             '';
           });
         in
-        pruned.overrideAttrs (_: {
+        injectVfs pkgs (pruned.overrideAttrs (o: {
+          # nano reads its system configuration from SYSCONFDIR "/nanorc";
+          # point that at the VFS mount so the shipped nanorc and the syntax
+          # files it includes come out of the binary.
+          configureFlags = (o.configureFlags or [ ]) ++ [ "--sysconfdir=${vfsRoot}" ];
+
           # Off, and measured: `make check` recurses through doc/, src/ and the
           # rest and reports "Nothing to be done" in each. nano's test suite
           # lives in a separate repository (nano-tests), not in the release
           # tarball, so there is nothing here to run.
           doCheck = false;
-        });
+        }));
       # nano cross-mingw pulls `pkgsCross.mingwW64.file` for libmagic; `file`
       # itself fails to cross (readcdf.c hits the same upstream bug the
       # unpins/file repo patches over). `file = null` falls back to
@@ -114,6 +248,8 @@
             '';
           });
         in
-        patched;
+        # `cross`, not `pkgs`: injectVfs branches on hostPlatform, and the outer
+        # pkgs is the x86_64-linux build set, which would take the POSIX path.
+        injectVfs cross patched;
     };
 }
