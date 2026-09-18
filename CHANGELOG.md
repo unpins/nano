@@ -16,6 +16,7 @@
 
 ### Changed
 
+- Updated to nano 9.2.
 - The Windows binary is now built by the same compiler as the Linux and macOS
   ones. It stays the same size (1.14 MB to 1.13 MB): the new compiler makes it
   about 15% smaller and the syntax definitions put that back. Checked on
