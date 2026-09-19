@@ -83,10 +83,10 @@
                              'rcstream = unpin_vfs_fopen(file, "rb");' \
               --replace-fail 'FILE *rcstream = fopen(nanorc, "rb");' \
                              'FILE *rcstream = unpin_vfs_fopen(nanorc, "rb");' \
-              --replace-fail 'if (access(file, R_OK) != 0)' \
-                             'if (unpin_vfs_access(file, R_OK) != 0)' \
-              --replace-fail 'if (stat(file, &rcinfo) != -1 && (S_ISDIR(rcinfo.st_mode) ||' \
-                             'if (unpin_vfs_stat(file, &rcinfo) != -1 && (S_ISDIR(rcinfo.st_mode) ||'
+              --replace-fail 'if (access(file, R_OK) < 0)' \
+                             'if (unpin_vfs_access(file, R_OK) < 0)' \
+              --replace-fail 'if (stat(file, &rcinfo) == 0 && (S_ISDIR(rcinfo.st_mode) ||' \
+                             'if (unpin_vfs_stat(file, &rcinfo) == 0 && (S_ISDIR(rcinfo.st_mode) ||'
           '';
 
           # After configure, so the conftest links (which carry no vfs.o) are
