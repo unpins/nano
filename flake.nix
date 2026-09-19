@@ -224,6 +224,19 @@
           cross = ulib.mingwStaticCross pkgs;
           patched = (cross.nano.override { file = null; }).overrideAttrs (old: {
             patches = (old.patches or [ ]) ++ [ ./nano-mingw-rewinddir.patch ];
+            # nano 9.2 copies the backup's timestamps from `st_atim`/`st_mtim`,
+            # which mingw's `struct _stat64` doesn't have. gnulib's
+            # stat-time.h (bundled) reads them portably, whole seconds here.
+            postPatch = (old.postPatch or "") + ''
+              substituteInPlace src/files.c \
+                --replace-fail '#include <errno.h>' \
+                               '#include <errno.h>
+              #include "stat-time.h"' \
+                --replace-fail 'filetimes[0] = fileinfo.st_atim;' \
+                               'filetimes[0] = get_stat_atime(&fileinfo);' \
+                --replace-fail 'filetimes[1] = fileinfo.st_mtim;' \
+                               'filetimes[1] = get_stat_mtime(&fileinfo);'
+            '';
             # No `LDFLAGS=-static` here: it was for mingw-gcc's runtime DLLs, and
             # the engine has none to fold. Measured, not assumed — the `.exe`
             # built without it is byte-identical.
