@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [9.2-1] - 2026-09-26
+
 ### Added
 
 - Syntax highlighting now works out of the box. The 39 definitions nano ships
