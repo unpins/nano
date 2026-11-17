@@ -31,8 +31,10 @@
       # rides along for a user's own `include`. Explicit includes rather than a
       # wildcard: nano expands an include through glob(3), and a literal path
       # needs nothing from the mount but the open itself. Text files, so one
-      # build-host copy serves every target.
-      syntaxTree = pkgs: pkgs.buildPackages.runCommand "nano-syntax" { } ''
+      # build-host copy serves every target. With libmagic, its compiled
+      # database too (byte-order independent, the same file's version), read
+      # by ./nano-vfs-magic.patch.
+      syntaxTree = withMagic: pkgs: pkgs.buildPackages.runCommand "nano-syntax" { } (''
         mkdir -p "$out/syntax"
         cp ${pkgs.buildPackages.nano}/share/nano/*.nanorc "$out/syntax/"
         cp -r ${pkgs.buildPackages.nano}/share/nano/extra "$out/syntax/extra"
@@ -40,7 +42,9 @@
           echo "include \"${vfsRoot}/syntax/$(basename "$f")\"" >> "$out/nanorc"
         done
         test -s "$out/nanorc" && test -s "$out/syntax/nix.nanorc"
-      '';
+      '' + pkgs.lib.optionalString withMagic ''
+        cp ${pkgs.buildPackages.file}/share/misc/magic.mgc "$out/magic.mgc"
+      '');
 
       # Vendor the unpin-vfs core so nano reads its system nanorc and the
       # syntax files straight out of the binary (./nano-vfs.patch binds the
@@ -117,7 +121,7 @@
         removeReferences = [ "nano-static" "nano-x86_64-w64-mingw32" ];
         # Merge the syntax tree into the mega's EOF ZIP, the way file's magic
         # database and tcc's sysroot ride along.
-        runtimeDataRoot = pkgs: syntaxTree pkgs;
+        runtimeDataRoot = pkgs: syntaxTree true pkgs;
       };
 
       # The same tree on the shipped standalone binary; man pages are
@@ -125,13 +129,13 @@
       runtimeEmbed = {
         native = pkgs: base: {
           runtimeStage = ''
-            cp -a ${syntaxTree pkgs}/. "$__unpin_stage/"
+            cp -a ${syntaxTree true pkgs}/. "$__unpin_stage/"
             chmod -R u+w "$__unpin_stage"
           '';
         };
         windows = pkgs: base: {
           runtimeStage = ''
-            cp -a ${syntaxTree pkgs}/. "$__unpin_stage/"
+            cp -a ${syntaxTree false pkgs}/. "$__unpin_stage/"
             chmod -R u+w "$__unpin_stage"
           '';
         };
@@ -141,22 +145,16 @@
           p = pkgs.pkgsStatic;
           # Fallback terminfo is baked centrally for every engine-Linux ncurses
           # (native-overlay/ncurses.nix), so p.ncurses already carries it.
-          # libmagic compiles its default database path from `file`'s own
-          # datadir, so nano linked against pkgsStatic.file was carrying
-          # /nix/store/<file>/share/misc/magic -- a LIVE reference (it dragged
-          # file's whole closure) that resolves only on a machine that has that
-          # exact store path. For everyone running the standalone binary it does
-          # not exist, magic_load() fails, and the content-based syntax
-          # detection the README promises never happens. /usr/share/misc/magic
-          # is where Debian, Fedora and macOS all keep it, so a distro-built
-          # nano finds a real database there. The install still writes into
-          # $out (datadir at install time), it is only the COMPILED default that
-          # moves.
+          # nano reads the embedded magic.mgc (./nano-vfs-magic.patch). This
+          # moves libmagic's compiled fallback, reached only if that copy is
+          # missing, from file's store path (a live reference that drags file's
+          # closure) to /usr/share/misc/magic.
           magicFile = p.file.overrideAttrs (fo: {
             configureFlags = (fo.configureFlags or [ ]) ++ [ "--datadir=/usr/share" ];
             installFlags = (fo.installFlags or [ ]) ++ [ "datadir=${placeholder "out"}/share" ];
           });
           pruned = (p.nano.override { file = magicFile; }).overrideAttrs (old: {
+            patches = (old.patches or [ ]) ++ [ ./nano-vfs-magic.patch ];
             postInstall = (old.postInstall or "") + "\n" + ''
               for o in $outputs; do
                 d="''${!o}"
