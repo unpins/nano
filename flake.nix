@@ -42,51 +42,19 @@
       '';
 
       # Vendor the unpin-vfs core so nano reads its system nanorc and the
-      # syntax files straight out of the binary. The objects are precompiled
-      # with the right -D knobs (the implicit .c.o rule carries none) and put
-      # on the link line through nano_LDADD, kept out of nano_SOURCES so make
-      # never rebuilds them with the wrong flags.
+      # syntax files straight out of the binary (./nano-vfs.patch binds the
+      # rcfile reads and links the objects). The objects are precompiled with
+      # the right -D knobs; the implicit .c.o rule carries none.
       injectVfs = pkgs: drv: drv.overrideAttrs (old:
         let
           lib = pkgs.lib;
           isWin = pkgs.stdenv.hostPlatform.isWindows;
         in
         {
+          patches = (old.patches or [ ]) ++ [ ./nano-vfs.patch ];
           postPatch = (old.postPatch or "") + ''
             echo "==> inject unpin-vfs core (self-EOF + zstd) for the embedded nanorc"
             cp ${ulib.vfsCore}/*.c ${ulib.vfsCore}/*.h src/
-
-            echo "==> put the VFS objects on nano's link line"
-            substituteInPlace src/Makefile.in \
-              --replace-fail 'nano_LDADD = $(top_builddir)/lib/libgnu.a' \
-                'nano_LDADD = vfs.o miniz.o unpin_zstd.o $(top_builddir)/lib/libgnu.a'
-
-            echo "==> read the rcfiles through the VFS"
-            # The explicit API at the two call sites, rather than binding the
-            # libc name for the whole program: these are the only two opens
-            # that may land in the mount, and naming them keeps every other
-            # file nano touches on the real filesystem by construction. It is
-            # also the one binding that reads the same on all three platforms
-            # -- vfs.c's _WIN32 half has no rename mode, and a force-included
-            # header cannot come before gnulib's config.h.
-            #
-            # is_good_file() is the gate in front of both: nano only parses an
-            # rcfile it has already access()ed and stat()ed, so those two go
-            # through the VFS as well. The other guard,
-            #     if (access(file, R_OK) == 0 && !is_good_file(file)) return;
-            # is left alone and works in our favour: for a path that lives only
-            # in the binary that access() fails against the real filesystem,
-            # the && short-circuits, and the fopen below is reached.
-            sed -i '/#include "prototypes.h"/a extern FILE *unpin_vfs_fopen(const char *path, const char *mode);\nextern int unpin_vfs_access(const char *path, int mode);\nextern int unpin_vfs_stat(const char *path, struct stat *st);' src/rcfile.c
-            substituteInPlace src/rcfile.c \
-              --replace-fail 'rcstream = fopen(file, "rb");' \
-                             'rcstream = unpin_vfs_fopen(file, "rb");' \
-              --replace-fail 'FILE *rcstream = fopen(nanorc, "rb");' \
-                             'FILE *rcstream = unpin_vfs_fopen(nanorc, "rb");' \
-              --replace-fail 'if (access(file, R_OK) < 0)' \
-                             'if (unpin_vfs_access(file, R_OK) < 0)' \
-              --replace-fail 'if (stat(file, &rcinfo) == 0 && (S_ISDIR(rcinfo.st_mode) ||' \
-                             'if (unpin_vfs_stat(file, &rcinfo) == 0 && (S_ISDIR(rcinfo.st_mode) ||'
           '';
 
           # After configure, so the conftest links (which carry no vfs.o) are

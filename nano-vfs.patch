@@ -1,0 +1,76 @@
+Read nano's rcfiles through the embedded unpin-vfs mount.
+
+The explicit API at the two call sites, rather than binding the libc name
+for the whole program: these are the only two opens that may land in the
+mount, and naming them keeps every other file nano touches on the real
+filesystem by construction. It is also the one binding that reads the same
+on all three platforms -- vfs.c's _WIN32 half has no rename mode, and a
+force-included header cannot come before gnulib's config.h.
+
+is_good_file() is the gate in front of both: nano only parses an rcfile it
+has already access()ed and stat()ed, so those two go through the VFS as
+well. The other guard,
+    if (access(file, R_OK) == 0 && !is_good_file(file)) return;
+is left alone and works in our favour: for a path that lives only in the
+binary that access() fails against the real filesystem, the && short-
+circuits, and the fopen below is reached.
+
+The VFS objects go on nano's link line through nano_LDADD, kept out of
+nano_SOURCES so make never rebuilds them with the wrong flags (the flake
+precompiles them in preBuild).
+
+--- a/src/Makefile.in
++++ b/src/Makefile.in
+@@ -2256,7 +2256,7 @@
+ 		utils.c \
+ 		winio.c
+ 
+-nano_LDADD = $(top_builddir)/lib/libgnu.a @LIBINTL@ \
++nano_LDADD = vfs.o miniz.o unpin_zstd.o $(top_builddir)/lib/libgnu.a @LIBINTL@ \
+ 		$(GETRANDOM_LIB) $(CLOCK_TIME_LIB) $(LIBTHREAD)
+ 
+ all: all-am
+--- a/src/rcfile.c
++++ b/src/rcfile.c
+@@ -22,6 +22,9 @@
+  **************************************************************************/
+ 
+ #include "prototypes.h"
++extern FILE *unpin_vfs_fopen(const char *path, const char *mode);
++extern int unpin_vfs_access(const char *path, int mode);
++extern int unpin_vfs_stat(const char *path, struct stat *st);
+ 
+ #ifdef ENABLE_NANORC
+ 
+@@ -892,11 +895,11 @@
+ 	struct stat rcinfo;
+ 
+ 	/* First check that the file exists and is readable. */
+-	if (access(file, R_OK) < 0)
++	if (unpin_vfs_access(file, R_OK) < 0)
+ 		return FALSE;
+ 
+ 	/* If the thing exists, it may be neither a directory nor a device. */
+-	if (stat(file, &rcinfo) == 0 && (S_ISDIR(rcinfo.st_mode) ||
++	if (unpin_vfs_stat(file, &rcinfo) == 0 && (S_ISDIR(rcinfo.st_mode) ||
+ 				S_ISCHR(rcinfo.st_mode) || S_ISBLK(rcinfo.st_mode))) {
+ 		jot_error(S_ISDIR(rcinfo.st_mode) ? N_("'%s' is a directory") :
+ 										N_("'%s' is a device file"), file);
+@@ -919,7 +922,7 @@
+ 	if (access(file, R_OK) == 0 && !is_good_file(file))
+ 		return;
+ 
+-	rcstream = fopen(file, "rb");
++	rcstream = unpin_vfs_fopen(file, "rb");
+ 
+ 	if (rcstream == NULL) {
+ 		jot_error(N_("Error reading %s: %s"), file, strerror(errno));
+@@ -1700,7 +1703,7 @@
+ /* Read and interpret one of the two nanorc files. */
+ void parse_one_nanorc(void)
+ {
+-	FILE *rcstream = fopen(nanorc, "rb");
++	FILE *rcstream = unpin_vfs_fopen(nanorc, "rb");
+ 
+ 	/* If opening the file succeeded, parse it.  Otherwise, only
+ 	 * complain if the file actually exists. */
