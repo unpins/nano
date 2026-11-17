@@ -165,7 +165,6 @@
       };
       build = pkgs:
         let
-          ulib = unpins-lib.lib;
           p = pkgs.pkgsStatic;
           # Fallback terminfo is baked centrally for every engine-Linux ncurses
           # (native-overlay/ncurses.nix), so p.ncurses already carries it.
@@ -220,7 +219,6 @@
       # patching gnulib, native builds unchanged.
       windowsBuild = pkgs:
         let
-          ulib = unpins-lib.lib;
           cross = ulib.mingwStaticCross pkgs;
           patched = (cross.nano.override { file = null; }).overrideAttrs (old: {
             patches = (old.patches or [ ]) ++ [ ./nano-mingw-rewinddir.patch ];
