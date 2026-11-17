@@ -25,7 +25,7 @@ unpin install nano
 
 Installing also creates an `rnano` command next to `nano`; invoking it is equivalent to `nano -R` (restricted mode).
 
-Syntax highlighting works with no setup: the 39 definitions nano ships (C, Python, Go, Rust, Markdown, shell, …) travel inside the binary and are read from there. Your own `~/.nanorc` is still read on top, so you can override a colour or add a syntax of your own.
+Syntax highlighting works with no setup: the 40 definitions nano enables by default (C, Python, Go, Rust, Nix, Markdown, shell, …) travel inside the binary and are read from there. Five more (Ada, Fortran, Haskell, POV-Ray, RPM spec) ride along off by default; turn one on from your `~/.nanorc` with `include "/__unpins_nanorc__/syntax/extra/fortran.nanorc"`. Your own `~/.nanorc` is still read on top, so you can override a colour or add a syntax of your own.
 
 ## Man pages
 
@@ -34,10 +34,11 @@ Syntax highlighting works with no setup: the 39 definitions nano ships (C, Pytho
 ## Build notes
 
 - **Windows** uses mingw; Linux and macOS use static builds. All three ship one binary; `rnano` is the same file under another name (nano reads its own program name and switches to restricted mode), which `unpin install` creates for you.
-- **Syntax definitions embedded.** nano reads its system configuration from a compiled-in path, so that path is pointed at a mount served from a ZIP at the binary's end (the shared unpin-vfs core), holding a `nanorc` and the 39 syntax files it includes. Only the two reads that can land in the mount — the system nanorc and each file it includes — go through the VFS; every other file nano touches reaches the real filesystem by construction. A build-time check refuses to ship a binary where that wiring did not take, since the failure would otherwise be silent: nano would find no configuration and simply not highlight.
-- **Syntax detection.** On Linux/macOS nano links `libmagic` for content-based syntax detection (the `magic` nanorc directive) in addition to the usual extension and first-line matching. The Windows build drops libmagic (it doesn't cross-compile cleanly) and relies on extension/first-line matching only.
+- **Syntax definitions embedded.** nano reads its system configuration from a compiled-in path, so that path is pointed at a mount served from a ZIP at the binary's end (the shared unpin-vfs core), holding a `nanorc`, the syntax files it includes and the `extra/` ones. Only the two reads that can land in the mount — the system nanorc and each file it includes — go through the VFS; every other file nano touches reaches the real filesystem by construction. A build-time check refuses to ship a binary where that wiring did not take, since the failure would otherwise be silent: nano would find no configuration and simply not highlight.
+- **Syntax detection.** On Linux and macOS nano links `libmagic`, so `set magic` in your `~/.nanorc` adds content-based detection to the usual extension and first-line matching. Its database is embedded too, so it works on a host without `file` installed; `MAGIC` still points it at another one.
+- **Not included:** content-based detection on Windows: nano.exe matches by extension and first line only, because libmagic and nano's own portability library both define `getdelim` there.
 - **Terminal.** nano links ncurses; a minimal fallback terminfo is embedded so it renders on common terminals even when the host has no terminfo database. A host database still takes precedence when present.
-- **Tests.** nano's testsuite lives in its upstream git tree, not the release tarball, so there is no `make check` to run; `nano --version` is the smoke floor.
+- **Tests:** nano ships no test suite.
 
 ## Build locally
 
@@ -56,4 +57,4 @@ The first invocation will offer to add the [unpins.cachix.org](https://unpins.ca
 
 ## Manual download
 
-The [Releases](https://github.com/unpins/nano/releases) page has standalone binaries and a `.tar.zst` data archive (`*.nanorc` syntax files) for manual download.
+The [Releases](https://github.com/unpins/nano/releases) page has standalone binaries for manual download.

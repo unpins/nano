@@ -2,6 +2,23 @@
 
 ## [Unreleased]
 
+### Added
+
+- Nix syntax highlighting, which nixpkgs adds to nano, and the five optional
+  definitions upstream keeps in `extra/` (Ada, Fortran, Haskell, POV-Ray, RPM
+  spec), turned on with an `include` line in your `~/.nanorc`.
+- `set magic` works without the host's `file` database: libmagic's database is
+  now inside the binary (Linux and macOS; +325 KB).
+
+### Fixed
+
+- Windows: syntax highlighting. The 9.2-1 `.exe` looked for its configuration
+  in `/etc/nanorc` instead of inside the binary, so it coloured nothing.
+- Windows: opening any file no longer shows "Path '.' is not accessible", and
+  nano creates its lock file again.
+- The README no longer offers a `.tar.zst` syntax archive; the release never
+  had one.
+
 ## [9.2-1] - 2026-09-26
 
 ### Added
