@@ -1,0 +1,21 @@
+has_valid_path() asks access(dir, X_OK) before opening a file. The UCRT's
+access() takes only F_OK/W_OK/R_OK and fails on X_OK, so on Windows every
+file opened with "Path '.' is not accessible" and nano skipped its lock
+file. A directory there is always searchable: check existence instead.
+
+--- a/src/files.c
++++ b/src/files.c
+@@ -366,7 +366,13 @@
+ 			statusline(ALERT, _("Path '%s': %s"), parentdir, strerror(errno));
+ 	} else if (!S_ISDIR(parentinfo.st_mode))
+ 		statusline(ALERT, _("Path '%s' is not a directory"), parentdir);
++#ifdef _WIN32
++	/* The UCRT's access() rejects X_OK; a directory there is always
++	 * searchable, so existence is the whole question. */
++	else if (access(parentdir, F_OK) < 0)
++#else
+ 	else if (access(parentdir, X_OK) < 0)
++#endif
+ 		statusline(ALERT, _("Path '%s' is not accessible"), parentdir);
+ #ifndef NANO_TINY
+ 	else if (ISSET(LOCKING) && !ISSET(VIEW_MODE) && access(parentdir, W_OK) < 0)

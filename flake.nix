@@ -192,6 +192,7 @@
             patches = (old.patches or [ ]) ++ [
               ./nano-mingw-rewinddir.patch
               ./nano-mingw-stat-time.patch
+              ./nano-mingw-access.patch
             ];
             # No `LDFLAGS=-static` here: it was for mingw-gcc's runtime DLLs, and
             # the engine has none to fold. Measured, not assumed — the `.exe`
