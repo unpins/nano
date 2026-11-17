@@ -53,6 +53,10 @@
         in
         {
           patches = (old.patches or [ ]) ++ [ ./nano-vfs.patch ];
+          # nano reads its system configuration from SYSCONFDIR "/nanorc";
+          # point that at the VFS mount so the shipped nanorc and the syntax
+          # files it includes come out of the binary.
+          configureFlags = (old.configureFlags or [ ]) ++ [ "--sysconfdir=${vfsRoot}" ];
           postPatch = (old.postPatch or "") + ''
             echo "==> inject unpin-vfs core (self-EOF + zstd) for the embedded nanorc"
             cp ${ulib.vfsCore}/*.c ${ulib.vfsCore}/*.h src/
@@ -163,11 +167,6 @@
           });
         in
         injectVfs pkgs (pruned.overrideAttrs (o: {
-          # nano reads its system configuration from SYSCONFDIR "/nanorc";
-          # point that at the VFS mount so the shipped nanorc and the syntax
-          # files it includes come out of the binary.
-          configureFlags = (o.configureFlags or [ ]) ++ [ "--sysconfdir=${vfsRoot}" ];
-
           # Off, and measured: `make check` recurses through doc/, src/ and the
           # rest and reports "Nothing to be done" in each. nano's test suite
           # lives in a separate repository (nano-tests), not in the release
