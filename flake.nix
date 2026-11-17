@@ -26,19 +26,20 @@
       # prefix, so a drive/backslash-mangled path still resolves.
       vfsMarker = "__unpins_nanorc__";
 
-      # The syntax definitions upstream ships in syntax/, plus a nanorc that
-      # pulls each one in by name. Explicit includes rather than a wildcard:
-      # nano expands an include through glob(3), and a literal path needs
-      # nothing from the mount but the open itself. Text files, so one
+      # The syntax definitions nixpkgs' nano installs (upstream's syntax/ plus
+      # its nix.nanorc), and a nanorc that pulls each one in by name; extra/
+      # rides along for a user's own `include`. Explicit includes rather than a
+      # wildcard: nano expands an include through glob(3), and a literal path
+      # needs nothing from the mount but the open itself. Text files, so one
       # build-host copy serves every target.
       syntaxTree = pkgs: pkgs.buildPackages.runCommand "nano-syntax" { } ''
-        mkdir -p "$out/syntax" src
-        tar xf ${pkgs.buildPackages.nano.src} -C src --strip-components=1
-        cp src/syntax/*.nanorc "$out/syntax/"
+        mkdir -p "$out/syntax"
+        cp ${pkgs.buildPackages.nano}/share/nano/*.nanorc "$out/syntax/"
+        cp -r ${pkgs.buildPackages.nano}/share/nano/extra "$out/syntax/extra"
         for f in "$out"/syntax/*.nanorc; do
           echo "include \"${vfsRoot}/syntax/$(basename "$f")\"" >> "$out/nanorc"
         done
-        test -s "$out/nanorc"
+        test -s "$out/nanorc" && test -s "$out/syntax/nix.nanorc"
       '';
 
       # Vendor the unpin-vfs core so nano reads its system nanorc and the
