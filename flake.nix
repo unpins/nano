@@ -8,13 +8,9 @@
 
   inputs.unpins-lib.url = "github:unpins/nix-lib";
 
-  # nano ships an `rnano` symlink that dispatches via argv[0] to enable
-  # restricted mode (same as `nano -R`). Drop the symlink at build time
-  # and embed it as UNPIN_META so unpin's installer recreates the alias.
-  #
-  # Plus: bake the curated terminfo fallback list into ncurses → nano
-  # renders correctly on hosts without `/usr/share/terminfo`. Host
-  # terminfo still wins when present (database stays enabled).
+  # nano's `rnano` symlink is dropped at build time; multicall.programs
+  # declares it as an alias, which unpin's installer recreates. The fallback
+  # terminfo comes with nix-lib's ncurses.
   outputs = { self, unpins-lib }:
     let
       ulib = unpins-lib.lib;
@@ -165,16 +161,15 @@
           });
         in
         injectVfs pkgs (pruned.overrideAttrs (o: {
-          # Off, and measured: `make check` recurses through doc/, src/ and the
-          # rest and reports "Nothing to be done" in each. nano's test suite
-          # lives in a separate repository (nano-tests), not in the release
-          # tarball, so there is nothing here to run.
+          # Off, and measured: the release tarball has no test suite
+          # (SUBDIRS = doc lib m4 po src syntax), so `make check` reports
+          # "Nothing to be done" in each.
           doCheck = false;
         }));
-      # nano cross-mingw pulls `pkgsCross.mingwW64.file` for libmagic; `file`
-      # itself fails to cross (readcdf.c hits the same upstream bug the
-      # unpins/file repo patches over). `file = null` falls back to
-      # extension-based syntax detection.
+      # No libmagic in the `.exe` (`file = null`): extension and first-line
+      # detection only. Linking it takes unpins/file's recipe (static libgnurx,
+      # its cdf.h patch, -lshlwapi) and then still clashes with nano's gnulib
+      # over getdelim, which libmagic also replaces on mingw.
       #
       # The remaining clash is in browser.c: nano's bundled gnulib
       # `#define DIR struct gl_directory` so its `dirfd` module works, but
