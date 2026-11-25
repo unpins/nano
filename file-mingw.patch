@@ -1,0 +1,19 @@
+--- a/src/cdf.h
++++ b/src/cdf.h
+@@ -35,11 +35,11 @@
+ #ifndef _H_CDF_
+ #define _H_CDF_
+
+-#ifdef WIN32
+-#include <winsock2.h>
+-#define timespec timeval
+-#define tv_nsec tv_usec
+-#endif
++/* Upstream aliases `struct timespec` to `struct timeval` on WIN32 as a legacy
++ * pre-mingw-w64 shim. Modern mingw-w64 ships its own `struct timespec` with a
++ * 64-bit `time_t tv_sec`, while `struct timeval.tv_sec` is `long` (32-bit on
++ * x86_64-w64-mingw32). Keeping the alias makes `cdf_ctime(&ts.tv_sec, ...)` a
++ * pointer-type mismatch (long* vs time_t*). Skip the alias on mingw. */
+ #ifdef __DJGPP__
+ #define timespec timeval
+ #define tv_nsec tv_usec

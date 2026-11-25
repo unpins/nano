@@ -27,10 +27,10 @@
       # rides along for a user's own `include`. Explicit includes rather than a
       # wildcard: nano expands an include through glob(3), and a literal path
       # needs nothing from the mount but the open itself. Text files, so one
-      # build-host copy serves every target. With libmagic, its compiled
-      # database too (byte-order independent, the same file's version), read
-      # by ./nano-vfs-magic.patch.
-      syntaxTree = withMagic: pkgs: pkgs.buildPackages.runCommand "nano-syntax" { } (''
+      # build-host copy serves every target, and so does libmagic's compiled
+      # database (byte-order independent, the same file's version), read by
+      # ./nano-vfs-magic.patch.
+      syntaxTree = pkgs: pkgs.buildPackages.runCommand "nano-syntax" { } ''
         mkdir -p "$out/syntax"
         cp ${pkgs.buildPackages.nano}/share/nano/*.nanorc "$out/syntax/"
         cp -r ${pkgs.buildPackages.nano}/share/nano/extra "$out/syntax/extra"
@@ -38,9 +38,8 @@
           echo "include \"${vfsRoot}/syntax/$(basename "$f")\"" >> "$out/nanorc"
         done
         test -s "$out/nanorc" && test -s "$out/syntax/nix.nanorc"
-      '' + pkgs.lib.optionalString withMagic ''
         cp ${pkgs.buildPackages.file}/share/misc/magic.mgc "$out/magic.mgc"
-      '');
+      '';
 
       # Vendor the unpin-vfs core so nano reads its system nanorc and the
       # syntax files straight out of the binary (./nano-vfs.patch binds the
@@ -117,25 +116,19 @@
         removeReferences = [ "nano-static" "nano-x86_64-w64-mingw32" ];
         # Merge the syntax tree into the mega's EOF ZIP, the way file's magic
         # database and tcc's sysroot ride along.
-        runtimeDataRoot = pkgs: syntaxTree true pkgs;
+        runtimeDataRoot = syntaxTree;
       };
 
       # The same tree on the shipped standalone binary; man pages are
       # auto-harvested alongside it.
-      runtimeEmbed = {
-        native = pkgs: base: {
+      runtimeEmbed =
+        let stage = pkgs: base: {
           runtimeStage = ''
-            cp -a ${syntaxTree true pkgs}/. "$__unpin_stage/"
+            cp -a ${syntaxTree pkgs}/. "$__unpin_stage/"
             chmod -R u+w "$__unpin_stage"
           '';
         };
-        windows = pkgs: base: {
-          runtimeStage = ''
-            cp -a ${syntaxTree false pkgs}/. "$__unpin_stage/"
-            chmod -R u+w "$__unpin_stage"
-          '';
-        };
-      };
+        in { native = stage; windows = stage; };
       build = pkgs:
         let
           p = pkgs.pkgsStatic;
@@ -166,12 +159,13 @@
           # "Nothing to be done" in each.
           doCheck = false;
         }));
-      # No libmagic in the `.exe` (`file = null`): extension and first-line
-      # detection only. Linking it takes unpins/file's recipe (static libgnurx,
-      # its cdf.h patch, -lshlwapi) and then still clashes with nano's gnulib
-      # over getdelim, which libmagic also replaces on mingw.
+      # libmagic on mingw follows unpins/file's recipe (static libgnurx, its
+      # cdf.h patch). Its getline.c replacement also defines getdelim, which
+      # nano's gnulib defines too; libmagic's pair is renamed at compile time
+      # (LTO bitcode, so no objcopy). Its unlisted link deps go in LIBS for
+      # nano's -lmagic probe.
       #
-      # The remaining clash is in browser.c: nano's bundled gnulib
+      # browser.c: nano's bundled gnulib
       # `#define DIR struct gl_directory` so its `dirfd` module works, but
       # leaves `rewinddir` unreplaced. mingw's `<dirent.h>` declaration
       # `rewinddir(mingw_DIR *)` thus coexists with `dir` having type
@@ -181,8 +175,35 @@
       windowsBuild = pkgs:
         let
           cross = ulib.mingwStaticCross pkgs;
-          patched = (cross.nano.override { file = null; }).overrideAttrs (old: {
+          libgnurxStatic = cross.windows.libgnurx.overrideAttrs (old: {
+            NIX_CFLAGS_COMPILE = (old.NIX_CFLAGS_COMPILE or "") + " -std=gnu17";
+            buildPhase = ''
+              runHook preBuild
+              make regex.o
+              $AR rcs libgnurx.a regex.o
+              runHook postBuild
+            '';
+            postInstall = "";
+            installPhase = ''
+              runHook preInstall
+              mkdir -p $out/lib $out/include
+              install -m 644 libgnurx.a $out/lib/libgnurx.a
+              install -m 644 regex.h $out/include/regex.h
+              runHook postInstall
+            '';
+          });
+          magicFile = (cross.file.override { libgnurx = libgnurxStatic; }).overrideAttrs (old: {
+            patches = (old.patches or [ ]) ++ [ ./file-mingw.patch ];
+            makeFlags = (old.makeFlags or [ ]) ++ [ "LDFLAGS=-all-static" ];
+            NIX_CFLAGS_COMPILE = (old.NIX_CFLAGS_COMPILE or "") + " -Dgetline=file_getline -Dgetdelim=file_getdelim";
+            configureFlags = (old.configureFlags or [ ]) ++ [ "--datadir=/usr/share" ];
+            installFlags = (old.installFlags or [ ]) ++ [ "datadir=${placeholder "out"}/share" ];
+          });
+          patched = (cross.nano.override { file = magicFile; }).overrideAttrs (old: {
+            buildInputs = (old.buildInputs or [ ]) ++ [ libgnurxStatic cross.zlib ];
+            LIBS = "-lgnurx -lz -lshlwapi";
             patches = (old.patches or [ ]) ++ [
+              ./nano-vfs-magic.patch
               ./nano-mingw-rewinddir.patch
               ./nano-mingw-stat-time.patch
               ./nano-mingw-access.patch
