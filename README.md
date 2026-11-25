@@ -35,8 +35,8 @@ Syntax highlighting works with no setup: the 40 definitions nano enables by defa
 
 - **Windows** uses mingw; Linux and macOS use static builds. All three ship one binary; `rnano` is the same file under another name (nano reads its own program name and switches to restricted mode), which `unpin install` creates for you.
 - **Syntax definitions embedded.** nano reads its system configuration from a compiled-in path, so that path is pointed at a mount served from a ZIP at the binary's end (the shared unpin-vfs core), holding a `nanorc`, the syntax files it includes and the `extra/` ones. Only the two reads that can land in the mount — the system nanorc and each file it includes — go through the VFS; every other file nano touches reaches the real filesystem by construction. A build-time check refuses to ship a binary where that wiring did not take, since the failure would otherwise be silent: nano would find no configuration and simply not highlight.
-- **Syntax detection.** On Linux and macOS nano links `libmagic`, so `set magic` in your `~/.nanorc` adds content-based detection to the usual extension and first-line matching. Its database is embedded too, so it works on a host without `file` installed; `MAGIC` still points it at another one.
-- **Not included:** content-based detection on Windows: nano.exe matches by extension and first line only, because libmagic and nano's own portability library both define `getdelim` there.
+- **Syntax detection.** nano links `libmagic` on every platform, so `set magic` in your `~/.nanorc` adds content-based detection to the usual extension and first-line matching. Its database is embedded too, so it works on a host without `file` installed; `MAGIC` still points it at another one.
+- **Not included:** translated messages (no message catalogs ship, so nano speaks English).
 - **Terminal.** nano links ncurses; a minimal fallback terminfo is embedded so it renders on common terminals even when the host has no terminfo database. A host database still takes precedence when present.
 - **Tests:** nano ships no test suite.
 

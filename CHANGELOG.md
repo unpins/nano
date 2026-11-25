@@ -8,7 +8,9 @@
   definitions upstream keeps in `extra/` (Ada, Fortran, Haskell, POV-Ray, RPM
   spec), turned on with an `include` line in your `~/.nanorc`.
 - `set magic` works without the host's `file` database: libmagic's database is
-  now inside the binary (Linux and macOS; +325 KB).
+  now inside the binary (+325 KB).
+- Windows: `set magic` (content-based syntax detection), as on Linux and
+  macOS.
 
 ### Fixed
 
